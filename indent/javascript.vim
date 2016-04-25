@@ -63,7 +63,7 @@ let s:skip_expr = "synIDattr(synID(line('.'),col('.'),1),'name') =~ '".s:syng_st
 let s:line_term = '\s*\%(\%(\/\/\).*\)\=$'
 
 " Regex that defines continuation lines, not including (, {, or [.
-let s:continuation_regex = '\%([\\*+/.:]\|\%(<%\)\@<![=-]\|\W[|&?]\|||\|&&\|[^=]=[^=>].*,\)' . s:line_term
+let s:continuation_regex = '\%([\\*/.:]\|+\@<!+\|-\@<!-\|\%(<%\)\@<!=\|\W[|&?]\|||\|&&\|[^=]=[^=>].*,\)' . s:line_term
 
 " Regex that defines continuation lines.
 " TODO: this needs to deal with if ...: and so on
@@ -74,7 +74,7 @@ let s:one_line_scope_regex = '\%(\%(\<else\>\|\<\%(if\|for\|while\)\>\s*(\%([^()
 " Regex that defines blocks.
 let s:block_regex = '\%([{([]\)\s*\%(|\%([*@]\=\h\w*,\=\s*\)\%(,\s*[*@]\=\h\w*\)*|\)\=' . s:line_term
 
-let s:operator_first = '^\s*\%([-*/+.:?]\|||\|&&\)'
+let s:operator_first = '^\s*\%([*/.:?]\|\([-+]\)\1\@!\|||\|&&\)'
 
 let s:var_stmt = '^\s*\%(const\|let\|var\)'
 
@@ -153,9 +153,21 @@ function s:GetMSL(lnum, in_one_line_scope)
     " Otherwise, terminate search as we have found our MSL already.
     let line = getline(lnum)
     let col = match(line, s:msl_regex) + 1
+    let line2 = getline(msl)
+    let col2 = matchend(line2, ')')
     if (col > 0 && !s:IsInStringOrComment(lnum, col)) || s:IsInString(lnum, strlen(line))
       let msl = lnum
+
+    " if there are more closing brackets, continue from the line which has the matching opening bracket
+    elseif col2 > 0 && !s:IsInStringOrComment(msl, col2) && s:LineHasOpeningBrackets(msl)[0] == '2' && !a:in_one_line_scope
+      call cursor(msl, 1)
+      if searchpair('(', '', ')', 'bW', s:skip_expr) > 0
+        let lnum = line('.')
+        let msl = lnum
+      endif
+
     else
+
       " Don't use lines that are part of a one line scope as msl unless the
       " flag in_one_line_scope is set to 1
       "
@@ -166,7 +178,7 @@ function s:GetMSL(lnum, in_one_line_scope)
       if msl_one_line == 0
         break
       endif
-    endif
+    end
     let lnum = s:PrevNonBlankNonString(lnum - 1)
   endwhile
   return msl
@@ -404,7 +416,7 @@ function GetJavascriptIndent()
       return indent(prevline) + s:sw()
     end
     " If previous line starts with an operator...
-  elseif s:Match(prevline, s:operator_first) && !s:Match(prevline, s:comma_last)
+  elseif s:Match(prevline, s:operator_first) && !s:Match(prevline, s:comma_last) && !s:Match(prevline, '};\=' . s:line_term)
     let counts = s:LineHasOpeningBrackets(prevline)
     if counts[0] == '2' && counts[1] == '1'
       call cursor(prevline, 1)
@@ -478,17 +490,24 @@ function GetJavascriptIndent()
   if line =~ '[[({]'
     let counts = s:LineHasOpeningBrackets(lnum)
     if counts[0] == '1' && searchpair('(', '', ')', 'bW', s:skip_expr) > 0
-      if col('.') + 1 == col('$')
+      if col('.') + 1 == col('$') || line =~ s:one_line_scope_regex
         return ind + s:sw()
       else
         return virtcol('.')
       endif
-    elseif counts[1] == '1' || counts[2] == '1'
+    elseif counts[1] == '1' || counts[2] == '1' && counts[0] != '2'
       return ind + s:sw()
     else
       call cursor(v:lnum, vcol)
     end
-  elseif line =~ ')' || line =~ s:comma_last
+  elseif line =~ '.\+};\=' . s:line_term
+    call cursor(lnum, 1)
+    " Search for the opening tag
+    let mnum = searchpair('{', '', '}', 'bW', s:skip_expr)
+    if mnum > 0
+      return indent(s:GetMSL(mnum, 0)) 
+    end
+  elseif line =~ '.\+);\=' || line =~ s:comma_last
     let counts = s:LineHasOpeningBrackets(lnum)
     if counts[0] == '2'
       call cursor(lnum, 1)
@@ -497,7 +516,7 @@ function GetJavascriptIndent()
       if mnum > 0
         return indent(s:GetMSL(mnum, 0)) 
       end
-    elseif  line !~ s:var_stmt
+    elseif line !~ s:var_stmt
       return indent(prevline)
     end
   end
