@@ -17,6 +17,7 @@ setlocal nosmartindent
 setlocal indentexpr=GetJavascriptIndent()
 setlocal formatexpr=Fixedgq(v:lnum,v:count)
 setlocal indentkeys=0{,0},0),0],0\,:,!^F,o,O,e
+setlocal cinoptions+=j1,J1
 
 " Only define the function once.
 if exists("*GetJavascriptIndent")
@@ -43,7 +44,7 @@ endif
 let s:js_keywords = '^\s*\(break\|catch\|const\|continue\|debugger\|delete\|do\|else\|finally\|for\|function\|if\|in\|instanceof\|let\|new\|return\|switch\|this\|throw\|try\|typeof\|var\|void\|while\|with\)'
 let s:expr_case = '^\s*\(case\s\+[^\:]*\|default\)\s*:\s*'
 " Regex of syntax group names that are or delimit string or are comments.
-let s:syng_strcom = '\%(\%(template\)\@<!string\|regex\|comment\)\c'
+let s:syng_strcom = '\%(string\|regex\|comment\)\c'
 
 " Regex of syntax group names that are or delimit template strings
 let s:syng_template = 'template\c'
@@ -63,7 +64,7 @@ let s:skip_expr = "synIDattr(synID(line('.'),col('.'),1),'name') =~ '".s:syng_st
 let s:line_term = '\s*\%(\%(\/\/\).*\)\=$'
 
 " Regex that defines continuation lines, not including (, {, or [.
-let s:continuation_regex = '\%([\\*/.:]\|+\@<!+\|-\@<!-\|\%(<%\)\@<!=\|\W[|&?]\|||\|&&\|[^=]=[^=>].*,\)' . s:line_term
+let s:continuation_regex = '\%([\\*/.:]\|+\@<!+\|-\@<!-\|\%(<%\)\@<!=\|\W[|&?]\|||\|&&\|\%(=>.*\|=\)\@<!=[^=>].*,\)' . s:line_term
 
 let s:one_line_scope_regex = '\%(\<else\>\|=>\)' . s:line_term
 
@@ -136,7 +137,7 @@ function s:PrevNonBlankNonString(lnum)
       endif
     elseif !in_block && s:IsInMultilineComment(lnum, matchend(line, '\*/') - 1)
       let in_block = 1
-    elseif !in_block && line !~ '^\s*\%(//\).*$' && !(s:IsInStringOrComment(lnum, 1) && s:IsInStringOrComment(lnum, strlen(line)))
+    elseif !in_block && line !~ '^\s*\%(//\).*$' && !(s:IsInStringOrComment(lnum, 1) && !s:IsInTempl(lnum,1) && s:IsInStringOrComment(lnum, strlen(line)))
       break
     endif
     let lnum = prevnonblank(lnum - 1)
@@ -342,6 +343,11 @@ function GetJavascriptIndent()
 
   " If we are in a multi-line comment, cindent does the right thing.
   if s:IsInMultilineComment(v:lnum, 1) && !s:IsLineComment(v:lnum, 1)
+    return cindent(v:lnum)
+  endif
+  
+  " single opening bracket will assume you want a c style of indenting
+  if s:Match(v:lnum, '^\s*{' . s:line_term) && s:GetMSL(v:lnum,0) == v:lnum
     return cindent(v:lnum)
   endif
 
