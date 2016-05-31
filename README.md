@@ -30,8 +30,7 @@ And install it:
 
 ### Install with [pathogen](https://github.com/tpope/vim-pathogen)
 
-      cd ~/.vim/bundle
-      git clone https://github.com/pangloss/vim-javascript.git
+      git clone https://github.com/pangloss/vim-javascript.git ~/.vim/bundle/vim-javascript
 
 
 ## Configuration Variables
@@ -100,18 +99,6 @@ proposed change and how it is valuable.
 ## Bug Reports
 
 Report a bug on [GitHub Issues](https://github.com/pangloss/vim-javascript/issues).
-
-
-## A Quick Note on Regexes
-
-Vim 7.4 with patches LESS than 1-7 exhibits a bug that broke how we handle
-javascript regexes. Please update to a newer version or run the following
-commands to fix:
-
-```
-:set regexpengine=1
-:syntax enable
-```
 
 
 ## License
